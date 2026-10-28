@@ -1,0 +1,199 @@
+# Adapted from LQR Control/cruise_control_lqr.m and
+# System Models/cruise_control_ss.m at upstream revision 877271c.
+# Self-contained: the prepared learner bundle does not need the source scripts.
+mission_id: "01"
+version: "1.0.0"
+title: "Cruise Control with LQR"
+objective: >
+  Model a vehicle's speed response in MATLAB, assess whether the system is
+  stable and controllable, and design an LQR controller that tracks a desired
+  speed. Compare the original and controlled responses to understand how
+  feedback changes settling time and steady-state tracking. This mission
+  assumes familiarity with MATLAB variables, matrices, and plotting, and
+  basic knowledge of state-space models and feedback.
+supported_matlab_releases: [R2026a]
+required_capabilities: [MATLAB, Control System Toolbox, MATLAB MCP]
+write_mode: read_inspect
+capability_mode: guided_tutor
+allow_agent_edits: false
+
+app:
+  summary: "Model a cruise-control plant and design an LQR speed-tracking controller."
+  audience: "Learners familiar with MATLAB and basic state-space control."
+  difficulty: intermediate
+  estimated_minutes: 45
+  products: [MATLAB, Control System Toolbox]
+  topics: [state-space models, stability, controllability, LQR, reference tracking]
+  status: draft
+  learner_visible: true
+  tile_order: 10
+
+learning_outcomes:
+  - id: lo01
+    description: "Represent a vehicle's force-to-speed dynamics as a state-space model."
+  - id: lo02
+    description: "Use a response, poles, and controllability to characterize the plant."
+  - id: lo03
+    description: "Design an LQR feedback gain and compensate reference tracking."
+  - id: lo04
+    description: "Compare the original and controlled speed responses fairly."
+
+# No setup is needed; task 1 starts with an empty mission workspace.
+# Each reset restores only preceding tasks when resuming its named task.
+tasks:
+  - id: "t01"
+    title: "Model the vehicle"
+    involves: [command]
+    outcome_refs: [lo01]
+    instruction: >
+      A vehicle obeys m*dv/dt + b*v = F, with mass m = 100 kg and drag
+      coefficient b = 50 N*s/m. Create a continuous-time state-space model
+      named cruisePlant, using velocity as the state and output, and force
+      as the input. This model will let you predict how the vehicle responds
+      before adding feedback.
+    completion:
+      strategy:
+        - tool: evaluate_matlab_code
+          check: >
+            Inspect cruisePlant. It must be a continuous-time SISO ss model
+            with one state representing velocity: A = -0.5, B = 0.01,
+            C = 1, D = 0, within numerical tolerance. Accept equivalent
+            expressions for these matrices. Do not create the learner model.
+      description: "The force-to-velocity state-space model matches the vehicle equation."
+    hints:
+      - "Rearrange the vehicle equation so the velocity derivative is alone on the left."
+      - "For x = v and input F, identify A and B in dx/dt = A*x + B*F; velocity is also the output."
+      - "Create the model with cruisePlant = ss(-50/100, 1/100, 1, 0)."
+
+  - id: "t02"
+    title: "Explore the original response"
+    involves: [command, output_interpretation]
+    outcome_refs: [lo02]
+    instruction: >
+      Starting from rest, find the vehicle's speed under a constant 500 N
+      force over 0 to 12 seconds, sampled every 0.01 seconds. Keep the time
+      and velocity samples as cruiseTime and openVelocity, and plot the
+      response with labelled time and speed axes. Describe the speed it
+      approaches and how quickly it gets there.
+    completion:
+      strategy:
+        - tool: evaluate_matlab_code
+          check: >
+            Inspect cruisePlant, cruiseTime, openVelocity, and all open
+            figures. Verify the current model still describes the task 1
+            plant. The time vector must cover 0:0.01:12 and the velocity must
+            match 10*(1-exp(-0.5*t)) from rest within 1e-6 absolute tolerance,
+            allowing row or column vectors. At least one open figure must
+            plot these current time and velocity values and label the axes
+            with time in seconds and speed in m/s. Compare actual plotted
+            values, not figure titles or the presence of any figure.
+        - kind: learner_confirmation
+          check: >
+            The learner describes the rise toward 10 m/s and its gradual
+            approach to steady state; accept a qualitative account or an
+            approximate settling time consistent with the plotted response.
+      description: "The learner has plotted and interpreted the 500 N force response."
+    hints:
+      - "A constant force applied from rest is a scaled step input."
+      - "The step function can return response samples; multiply the plant by the force amplitude and supply the requested time vector."
+      - "Use cruiseTime = (0:0.01:12)'; openVelocity = step(500*cruisePlant, cruiseTime); figure; plot(cruiseTime, openVelocity); xlabel('Time (s)'); ylabel('Speed (m/s)'). Then describe the curve."
+
+  - id: "t03"
+    title: "Assess stability and controllability"
+    involves: [command, output_interpretation]
+    outcome_refs: [lo02]
+    instruction: >
+      Determine the poles and controllability rank of cruisePlant, keeping
+      them as plantPoles and controllabilityRank. Explain whether the plant
+      is asymptotically stable and whether its velocity state can be
+      controlled through the force input. These checks establish whether
+      state feedback is a suitable next step.
+    completion:
+      strategy:
+        - tool: evaluate_matlab_code
+          check: >
+            Inspect the current cruisePlant and the learner's plantPoles and
+            controllabilityRank. Verify the plant still matches task 1, its
+            computed poles match pole(cruisePlant), and its controllability
+            rank matches rank(ctrb(cruisePlant)). For this one-state plant,
+            the pole is -0.5 and the rank is 1. Do not compute or overwrite
+            these named learner variables on their behalf.
+        - kind: learner_confirmation
+          check: >
+            The learner connects the negative real pole to continuous-time
+            asymptotic stability and full controllability rank to the
+            ability to control the single velocity state.
+      description: "Numerical evidence supports the learner's stability and controllability assessment."
+    hints:
+      - "For a continuous-time model, examine where its poles lie and whether the input can influence every state."
+      - "Use pole to inspect stability and compare the rank of the ctrb matrix with the number of states."
+      - "Use plantPoles = pole(cruisePlant); controllabilityRank = rank(ctrb(cruisePlant)); then interpret the signs and rank."
+
+  - id: "t04"
+    title: "Design an LQR tracking controller"
+    involves: [command, configuration]
+    outcome_refs: [lo03]
+    instruction: >
+      Design continuous-time LQR state feedback for cruisePlant with state
+      weight Q = 1000 and input weight R = 0.1, saving the gain as lqrGain.
+      Create cruiseClosedLoop with desired speed as its input and actual
+      speed as its output. Include reference scaling so a constant desired
+      speed is reached without steady-state error in this ideal model.
+    completion:
+      strategy:
+        - tool: evaluate_matlab_code
+          check: >
+            Inspect the current plant, lqrGain, and cruiseClosedLoop.
+            Validate the plant against task 1 and compare lqrGain with the
+            continuous-time LQR solution for Q = 1000 and R = 0.1 within
+            1e-6 relative tolerance. Check that cruiseClosedLoop is a stable
+            continuous-time SISO model whose transfer behavior equals
+            (b+K)/(m*s+b+K) for m = 100, b = 50 and the verified K. Verify
+            unit DC gain and compare numerical step responses on 0:0.01:12
+            with tolerance 1e-6; accept equivalent realizations. The gain
+            is approximately 61.803398875 and the closed-loop pole is
+            approximately -1.118033989. Do not pass a model solely because
+            it has unit DC gain or is faster than the plant.
+      description: "The LQR feedback and reference scaling produce the required speed-tracking model."
+    hints:
+      - "State feedback determines the dynamics, but reference scaling is also needed to obtain the requested final speed."
+      - "Use lqr for the feedback gain. Form the dynamics with A-B*K and choose a reference-input gain that makes the closed-loop DC gain one."
+      - "Use lqrGain = lqr(cruisePlant, 1000, 0.1); unscaled = ss(cruisePlant.A-cruisePlant.B*lqrGain, cruisePlant.B, cruisePlant.C, cruisePlant.D); referenceScale = 1/dcgain(unscaled); cruiseClosedLoop = unscaled*referenceScale."
+
+  - id: "t05"
+    title: "Compare speed tracking"
+    involves: [command, output_interpretation]
+    outcome_refs: [lo04]
+    instruction: >
+      Compare the LQR-controlled response to a desired speed of 10 m/s with
+      the original 500 N force response, both starting from rest over the
+      same cruiseTime samples. Save the controlled speed as closedVelocity.
+      Show both responses in one figure with a legend and labelled time
+      and speed axes. Explain what changed in settling time and whether
+      both responses approach the same final speed.
+    completion:
+      strategy:
+        - tool: evaluate_matlab_code
+          check: >
+            Recheck the current plant, LQR gain, and closed-loop transfer
+            behavior against tasks 1 and 4. Verify cruiseTime covers
+            0:0.01:12, openVelocity matches the 500 N plant step response,
+            and closedVelocity matches the 10 m/s closed-loop reference
+            step response within 1e-6 absolute tolerance. Inspect every
+            open figure and find one axes containing traces matching both
+            current time/data pairs, allowing row or column vectors, with
+            a legend that distinguishes original and LQR responses and
+            axes labelled with time in seconds and speed in m/s.
+        - kind: learner_confirmation
+          check: >
+            The learner explains that LQR settles faster for this design
+            and both responses approach 10 m/s. The original response uses
+            the 500 N force needed to balance drag at 10 m/s, while the
+            controlled response uses a 10 m/s speed reference. Accept an
+            explanation in the learner's own words; exact settling-time
+            numbers are not required.
+      description: "A labelled comparison and interpretation demonstrate the effect of LQR feedback."
+    hints:
+      - "Use the same time interval and initial condition so you can compare how the two speeds approach their final value."
+      - "The controlled model's input is desired speed, so its step amplitude should be 10. Reuse openVelocity for the original 500 N force response."
+      - "Use closedVelocity = step(10*cruiseClosedLoop, cruiseTime); figure; plot(cruiseTime, openVelocity, cruiseTime, closedVelocity); legend('Original: 500 N', 'LQR: 10 m/s reference'); xlabel('Time (s)'); ylabel('Speed (m/s)'). Then explain the difference."
