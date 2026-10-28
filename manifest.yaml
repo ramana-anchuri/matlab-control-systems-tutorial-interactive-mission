@@ -1,0 +1,19 @@
+schema_version: "2.0"
+id: "matlab-control-systems-tutorial"
+title: "MATLAB Control Systems Tutorial"
+source_url: "https://github.com/automaticdai/matlab-control-systems-tutorial"
+content_version: "0.1.0"
+minimum_toolbox_version: "0.2.0"
+summary: >
+  Guided control-system experiments based on this repository's MATLAB
+  tutorials. Start with cruise-control modelling, analysis, and LQR tracking.
+adapters:
+  - id: "generic"
+  - id: "codex"
+  - id: "claude-code"
+  - id: "gemini-cli"
+  - id: "github-copilot-vscode"
+  - id: "github-copilot-cli"
+missions:
+  - id: "cruise-control-lqr"
+    path: "missions/cruise-control-lqr/mission.yaml"
